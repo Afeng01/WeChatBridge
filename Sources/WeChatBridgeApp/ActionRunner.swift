@@ -103,7 +103,8 @@ final class ActionRunner {
                     return
                 }
                 let context = await self.sceneCoordinator.prepare(
-                    enabled: !self.preferences.scenes.enabledScenes.isEmpty,
+                    enabled: arrival.action != .obsidian
+                        && !self.preferences.scenes.enabledScenes.isEmpty,
                     groupName: nil,
                     captureTitle: arrival.capturesGroupName,
                     urls: arrival.urls,
@@ -231,13 +232,14 @@ final class ActionRunner {
         }
 
         do {
-            _ = try KnowledgeDelivery.deliver(
+            let notes = try KnowledgeDelivery.deliver(
                 urls: arrival.urls,
                 vaultPath: vaultPath,
                 subfolder: preferences.obsidianSubfolder,
                 chatName: context.groupName,
                 sceneName: context.scene?.name
             )
+            openInObsidian(notes, vaultPath: vaultPath)
             model.recordDelivery(urls: arrival.urls, action: .obsidian)
             sceneCoordinator.advance(context)
         } catch {
@@ -245,6 +247,23 @@ final class ActionRunner {
                 arrival,
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             )
+        }
+    }
+
+    private func openInObsidian(_ notes: [URL], vaultPath: String) {
+        let vault = URL(fileURLWithPath: vaultPath, isDirectory: true).standardizedFileURL
+        let prefix = vault.path.hasSuffix("/") ? vault.path : vault.path + "/"
+        for note in notes {
+            let path = note.standardizedFileURL.path
+            guard path.hasPrefix(prefix) else { continue }
+            var components = URLComponents()
+            components.scheme = "obsidian"
+            components.host = "open"
+            components.queryItems = [
+                URLQueryItem(name: "vault", value: vault.lastPathComponent),
+                URLQueryItem(name: "file", value: String(path.dropFirst(prefix.count))),
+            ]
+            if let url = components.url { NSWorkspace.shared.open(url) }
         }
     }
 
@@ -317,7 +336,9 @@ final class ActionRunner {
                 scene: scene,
                 previousSummaryAt: context.previousSummaryAt,
                 currentEnd: context.insights.end,
-                skillNames: skills.skillNames(for: scene)
+                skills: scene.effectiveSkillIDs.isEmpty
+                    ? nil
+                    : skills.promptContext(agent: agent)
             )
         }
         let prompt = doubaoReadsLocalArchive
@@ -385,12 +406,12 @@ final class ActionRunner {
             sceneCoordinator.advance(context)
             let missing = missingSkills(for: context.scene, bundleIdentifier: bundleIdentifier)
             if !missing.isEmpty {
-                let names = missing.map(\.name).joined(separator: "、")
+                let names = missing.joined(separator: "、")
                 toast.show(
-                    L10n.format("场景已使用，但缺少技能：%@", names),
+                    L10n.format("场景「%@」引用的技能不可用：%@", context.scene?.name ?? "", names),
                     symbol: "puzzlepiece.extension.fill",
                     tone: .warning,
-                    action: ToastPresenter.Action(title: L10n.text("去安装技能")) { [weak self] in
+                    action: ToastPresenter.Action(title: L10n.text("查看技能")) { [weak self] in
                         self?.openSkills?()
                     }
                 )
@@ -407,23 +428,20 @@ final class ActionRunner {
         }
     }
 
+    /// Display names of the skills a delivered scene references that have no
+    /// usable copy in the app-owned skill library.
     private func missingSkills(
         for scene: WeChatScene?,
         bundleIdentifier: String
-    ) -> [OfficialSkill] {
-        guard let scene, let agent = AgentID.matching(bundleIdentifier: bundleIdentifier) else {
+    ) -> [String] {
+        guard let scene, let agent = AgentID.matching(bundleIdentifier: bundleIdentifier),
+              !scene.effectiveSkillIDs.isEmpty
+        else {
             return []
         }
-        return scene.requiredSkillIDs.compactMap { id in
-            guard let skill = skills.skill(id: id),
-                  skill.supportedAgents.contains(agent)
-            else { return nil }
-            switch skills.status(for: skill, agent: agent) {
-            case .installed, .manualConfirmed:
-                return nil
-            default:
-                return skill
-            }
+        return scene.effectiveSkillIDs.compactMap { id in
+            let resolved = skills.resolve(id, agent: agent)
+            return resolved.mode == .missing ? resolved.displayName : nil
         }
     }
 
