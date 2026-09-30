@@ -236,12 +236,11 @@ while IFS= read -r PACKAGE; do
 	fi
 done < <(sed -nE 's/.*"package"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$SKILLS_ROOT/catalog.json")
 
-for AGENT_ROOT in ".codex/skills" ".qwenworkcn/skills" ".workbuddy/skills"; do
-	if ! grep -Fq "\"$AGENT_ROOT\"" "$ROOT/Sources/WeChatBridgeCore/AgentID.swift"; then
-		echo "AgentID direct install root drifted: $AGENT_ROOT" >&2
-		exit 1
-	fi
-done
+# Skills now live in the shared library and are referenced from scene prompts.
+if ! grep -Fq 'stateDirectory.appendingPathComponent("Skills", isDirectory: true)' "$ROOT/Sources/WeChatBridgeCore/Skills.swift"; then
+    echo "shared skill library root drifted" >&2
+    exit 1
+fi
 for LOGO in doubao qwen claude chatgpt obsidian workbuddy; do
 	if ! find "$ROOT/Resources/AppLogos" -maxdepth 1 -iname "*$LOGO*" -type f | grep -q .; then
 		echo "missing Agent logo: $LOGO" >&2
