@@ -39,18 +39,22 @@ final class KnowledgeDeliveryTests: XCTestCase {
         return url
     }
 
-    /// The folder entry's shape: the note and its 附件/ sit directly in the
-    /// chosen folder, with no 微信流 subfolder of WeChatBridge's own.
-    func testFolderDeliveryWritesNoteAndAttachmentsIntoTheChosenFolder() throws {
+    /// The folder entry's shape, the same as the Obsidian entry's: the note
+    /// and its 附件/ sit in a 微信流 subfolder of the chosen folder, never
+    /// directly in the folder itself.
+    func testFolderDeliveryWritesNoteAndAttachmentsIntoAWeChatFlowSubfolder() throws {
         let notes = try KnowledgeDelivery.deliver(
             urls: [try source()],
             folderPath: destination.path,
+            subfolder: "",
             chatName: "项目群",
             sceneName: nil
         )
-        let note = destination.appendingPathComponent("项目群的聊天.md")
+        let flow = destination.appendingPathComponent("微信流", isDirectory: true)
+        let note = flow.appendingPathComponent("项目群的聊天.md")
         XCTAssertEqual(notes, [note])
-        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path).sorted(), ["附件", "项目群的聊天.md"])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), ["微信流"])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: flow.path).sorted(), ["附件", "项目群的聊天.md"])
 
         let markdown = try String(contentsOf: note, encoding: .utf8)
         XCTAssertTrue(markdown.contains("# 项目群的聊天"))
@@ -58,17 +62,17 @@ final class KnowledgeDeliveryTests: XCTestCase {
         XCTAssertTrue(markdown.contains("[[附件/聊天记录.zip]]"))
         XCTAssertTrue(markdown.contains("![[附件/photo.png]]"))
 
-        let attachments = try fm.contentsOfDirectory(atPath: destination.appendingPathComponent("附件").path).sorted()
+        let attachments = try fm.contentsOfDirectory(atPath: flow.appendingPathComponent("附件").path).sorted()
         XCTAssertEqual(attachments, ["photo.png", "聊天记录.zip"])
     }
 
     /// A folder the user has not got (deleted, unmounted) is a failure, not a
-    /// silently recreated directory.
+    /// silently recreated directory — the subfolder never brings it back.
     func testFolderDeliveryRejectsAMissingDestinationFolder() throws {
         let archive = try source()
         let missing = root.appendingPathComponent("gone", isDirectory: true)
         XCTAssertThrowsError(
-            try KnowledgeDelivery.deliver(urls: [archive], folderPath: missing.path, chatName: nil, sceneName: nil)
+            try KnowledgeDelivery.deliver(urls: [archive], folderPath: missing.path, subfolder: "", chatName: nil, sceneName: nil)
         )
         XCTAssertFalse(fm.fileExists(atPath: missing.path))
         XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), [])
@@ -77,16 +81,34 @@ final class KnowledgeDeliveryTests: XCTestCase {
     /// A same-named note WeChatBridge did not write is never touched; the new
     /// note takes the next free number instead.
     func testFolderDeliveryNumbersANoteItDidNotWrite() throws {
-        let existing = destination.appendingPathComponent("项目群的聊天.md")
+        let flow = destination.appendingPathComponent("微信流", isDirectory: true)
+        let existing = flow.appendingPathComponent("项目群的聊天.md")
+        try fm.createDirectory(at: flow, withIntermediateDirectories: true)
         try Data("user's own note".utf8).write(to: existing)
         let notes = try KnowledgeDelivery.deliver(
             urls: [try source()],
             folderPath: destination.path,
+            subfolder: "",
             chatName: "项目群",
             sceneName: nil
         )
-        XCTAssertEqual(notes, [destination.appendingPathComponent("项目群的聊天 2.md")])
+        XCTAssertEqual(notes, [flow.appendingPathComponent("项目群的聊天 2.md")])
         XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "user's own note")
+    }
+
+    /// A subfolder the user named is honoured level by level, the same way the
+    /// Obsidian entry honours one inside the vault.
+    func testFolderDeliveryHonoursACustomSubfolder() throws {
+        let notes = try KnowledgeDelivery.deliver(
+            urls: [try source()],
+            folderPath: destination.path,
+            subfolder: "参考/微信流",
+            chatName: "项目群",
+            sceneName: nil
+        )
+        XCTAssertEqual(notes, [destination.appendingPathComponent("参考/微信流/项目群的聊天.md")])
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), ["参考"])
+        XCTAssertTrue(fm.fileExists(atPath: destination.appendingPathComponent("参考/微信流/附件/聊天记录.zip").path))
     }
 
     /// The Obsidian entry keeps its own landing place: the note goes into the

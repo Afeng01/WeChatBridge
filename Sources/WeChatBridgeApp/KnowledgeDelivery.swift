@@ -6,9 +6,9 @@ import Foundation
 /// converter able to rebuild the note without asking WeChat again.
 ///
 /// Two destinations share this assembly: 「沉淀到 Obsidian」 lands the note in
-/// a subfolder of the user's vault, and 「沉淀到文件夹」 lands it directly in
-/// the folder the user picked. The note shape — `聊天名.md` plus `附件/` — is
-/// the same either way.
+/// a subfolder of the user's vault, and 「沉淀到文件夹」 lands it in a subfolder
+/// of the folder the user picked — the same shape either way. The note shape —
+/// `聊天名.md` plus `附件/` — is the same too.
 enum KnowledgeDelivery {
     enum Failure: LocalizedError {
         case notConfigured
@@ -45,18 +45,28 @@ enum KnowledgeDelivery {
         )
     }
 
-    /// The folder entry: the note and its `附件/` land directly in the folder,
-    /// with no subfolder of WeChatBridge's own between them.
+    /// The folder entry: the folder is what the user configured, and the note
+    /// goes into a `微信流` (or named) subfolder of it — the same landing
+    /// shape the Obsidian entry writes inside its vault.
     @discardableResult
     static func deliver(
         urls: [URL],
         folderPath: String,
+        subfolder: String,
         chatName: String?,
         sceneName: String?
     ) throws -> [URL] {
         let folder = URL(fileURLWithPath: folderPath, isDirectory: true)
         try FolderDelivery.validateFolder(folder)
-        return try write(urls: urls, root: folder, chatName: chatName, sceneName: sceneName)
+
+        let subfolderPath = DisplayName.subfolderPath(subfolder)
+        let folderName = subfolderPath.isEmpty ? "微信流" : subfolderPath
+        return try write(
+            urls: urls,
+            root: folder.appendingPathComponent(folderName, isDirectory: true),
+            chatName: chatName,
+            sceneName: sceneName
+        )
     }
 
     /// The shared assembly: one `聊天名.md` (merged when a same-named note is

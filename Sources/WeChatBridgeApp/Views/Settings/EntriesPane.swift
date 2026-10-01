@@ -128,8 +128,8 @@ struct EntriesPane: View {
         )
     }
 
-    /// One row, not two: the folder entry has no subfolder of its own — the
-    /// note and `附件/` land directly in the chosen folder.
+    /// Two rows, the same pair the Obsidian entry shows: where the folder is,
+    /// then the subfolder of it the note lands in (`微信流` unless named).
     private var folderSettings: some View {
         VStack(spacing: 0) {
             SettingRow(
@@ -150,6 +150,22 @@ struct EntriesPane: View {
                     Button(L10n.text("选择文件夹…")) { chooseDeliveryFolder() }
                         .buttonStyle(SettingsActionButtonStyle())
                 }
+            }
+            .padding(Space.m)
+
+            Rectangle()
+                .fill(Theme.stroke)
+                .frame(height: Stroke.hairline)
+                .padding(.leading, Space.m)
+
+            SettingRow(
+                title: L10n.text("子文件夹"),
+                detail: L10n.text("聊天 Markdown 与原始 ZIP 会写入这个目录。"),
+                alignment: .center
+            ) {
+                TextField(L10n.text("子文件夹"), text: $preferences.folderDeliverySubfolder)
+                    .textFieldStyle(SettingsTextFieldStyle())
+                    .frame(width: SettingsControlMetrics.actionWidth)
             }
             .padding(Space.m)
         }

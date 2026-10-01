@@ -31,6 +31,7 @@ final class Preferences: ObservableObject {
         static let obsidianVaultPath = "com.xiangming.wechatbridge.obsidianVaultPath"
         static let obsidianSubfolder = "com.xiangming.wechatbridge.obsidianSubfolder"
         static let folderDeliveryPath = "com.xiangming.wechatbridge.folderDeliveryPath"
+        static let folderDeliverySubfolder = "com.xiangming.wechatbridge.folderDeliverySubfolder"
     }
 
     /// A week: long enough that last Friday's chat export is still there on
@@ -77,6 +78,7 @@ final class Preferences: ObservableObject {
         obsidianSubfolder = defaults.string(forKey: Key.obsidianSubfolder) ?? "微信流"
         folderDeliveryPath = defaults.string(forKey: Key.folderDeliveryPath)
             ?? Self.defaultFolderDeliveryPath
+        folderDeliverySubfolder = defaults.string(forKey: Key.folderDeliverySubfolder) ?? ""
     }
 
     /// Set only by finishing the guide. Closing its window half way through is
@@ -152,6 +154,13 @@ final class Preferences: ObservableObject {
     /// be re-expanded on every read for no gain.
     @Published var folderDeliveryPath: String {
         didSet { defaults.set(folderDeliveryPath, forKey: Key.folderDeliveryPath) }
+    }
+
+    /// The subfolder of the destination folder the note lands in, allowed to
+    /// name several levels with `/`. Empty means the `微信流` default — the
+    /// same fallback the Obsidian entry applies inside the vault.
+    @Published var folderDeliverySubfolder: String {
+        didSet { defaults.set(folderDeliverySubfolder, forKey: Key.folderDeliverySubfolder) }
     }
 
     /// Global scene shortcuts choose for the next share, not forever. A stale

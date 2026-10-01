@@ -270,6 +270,7 @@ final class ActionRunner {
             let notes = try KnowledgeDelivery.deliver(
                 urls: arrival.urls,
                 folderPath: preferences.folderDeliveryPath,
+                subfolder: preferences.folderDeliverySubfolder,
                 chatName: context.groupName,
                 sceneName: context.scene?.name
             )
