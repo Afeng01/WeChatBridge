@@ -14,7 +14,9 @@ import Foundation
 /// the user — the share sheet's own 「已复制」 or the pasted files in the target
 /// app — so the only thing left to report is a failure. 「沉淀到文件夹」 is the
 /// one exception: nothing appears on screen when a note lands in a folder, so
-/// it gets the one success toast, with a way to jump to the file.
+/// it gets the one success report — a system notification, which shows even
+/// while this app sits in the background where a self-drawn capsule cannot
+/// (see `DeliveryNotifier`).
 @MainActor
 final class ActionRunner {
     /// Opens 设置 → 入口, which is the only place the 「发送到自定义」 list can be
@@ -33,6 +35,7 @@ final class ActionRunner {
     private let sceneCoordinator: SceneCoordinator
     private let skills: SkillLibrary
     private let toast = ToastPresenter()
+    private let notifier = DeliveryNotifier()
     private let picker = TargetPickerPanel()
     /// The forward currently in flight, so the next one waits for it.
     ///
@@ -261,7 +264,10 @@ final class ActionRunner {
     /// 「沉淀到文件夹」 is not a paste destination either: the archive becomes a
     /// note in the folder the user picked. Unlike every other destination,
     /// nothing appears on screen when it works, so this is the one delivery
-    /// that reports success — a capsule with a way to the file (Issue #19).
+    /// that reports success — a notification with a way to the file (Issue
+    /// #19). A notification rather than a capsule because the share extension
+    /// puts this app in the background for every delivery, where a self-drawn
+    /// window never appears.
     private func deliverToFolder(
         _ arrival: ArrivedBatch,
         context: SceneCoordinator.Selection
@@ -280,13 +286,7 @@ final class ActionRunner {
                 fileURLWithPath: preferences.folderDeliveryPath,
                 isDirectory: true
             )
-            toast.show(
-                L10n.format("已保存到 %@", folder.lastPathComponent),
-                symbol: "checkmark.circle.fill",
-                action: ToastPresenter.Action(title: L10n.text("在访达中显示")) {
-                    NSWorkspace.shared.activateFileViewerSelecting(notes)
-                }
-            )
+            await notifier.notify(savedTo: folder.lastPathComponent, revealing: notes)
         } catch {
             fallBack(
                 arrival,
