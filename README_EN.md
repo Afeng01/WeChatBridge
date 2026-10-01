@@ -39,7 +39,7 @@ flowchart LR
 
 | Capability | Experience |
 | --- | --- |
-| Ten native entries | Pick a destination in WeChat without opening the main app |
+| Eleven native entries | Pick a destination in WeChat without opening the main app |
 | AI agent hand-off | Activate the target app, attach a scene prompt, and paste the archive |
 | Obsidian archiving | Create a Markdown note, retain the original ZIP, and organize it by chat name |
 | Custom destinations | Add any macOS app; terminal-style apps can receive file paths only |
@@ -60,6 +60,7 @@ flowchart LR
 | Send to WeSight | Activate WeSight and paste the conversation archive |
 | Send to DeepSeek Harness | Activate DeepSeek Harness and paste the conversation archive |
 | Save to Obsidian | Create a Markdown note and preserve the original attachment |
+| Collect in WeChatBridge | Receive multiple original ZIPs, then choose a target and scene once |
 | Copy to Clipboard | Keep the files ready for a manual paste |
 | Send to Custom | Route the batch to an app from your own list |
 
@@ -81,7 +82,7 @@ Pick a destination straight from WeChat's “Forward to other apps” menu, with
     <td align="center"><img src="Resources/Screenshots/usage-scenes.png" width="420" alt="Scene management pane" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Toggle any of the ten entries; missing apps are flagged</sub></td>
+    <td align="center"><sub>Toggle any of the eleven entries; missing apps are flagged</sub></td>
     <td align="center"><sub>Scenes store prompts and their agents, chosen at forward time</sub></td>
   </tr>
   <tr>
@@ -154,7 +155,7 @@ Tests/                    # Swift Testing / XCTest coverage
 site/                     # Sparkle update feed and release notes
 ```
 
-Swift Package Manager owns the source layout and the Sparkle dependency. `Scripts/make-app.sh` assembles the host executable and ten Share Extensions into a complete `.app` bundle.
+Swift Package Manager owns the source layout and the Sparkle dependency. `Scripts/make-app.sh` assembles the host executable and eleven Share Extensions into a complete `.app` bundle.
 
 ## Development checks
 
