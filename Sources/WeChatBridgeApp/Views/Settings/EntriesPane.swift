@@ -26,10 +26,12 @@ struct EntriesPane: View {
                 probe: probe,
                 compactDetails: true,
                 obsidianVaultPath: preferences.obsidianVaultPath,
+                folderPath: preferences.folderDeliveryPath,
                 customTargetCount: targets.targets.count
             ) { action in
                 switch action {
                 case .obsidian: configuration = .obsidian
+                case .folder: configuration = .folder
                 case .custom: configuration = .custom
                 default: break
                 }
@@ -60,6 +62,8 @@ struct EntriesPane: View {
                 switch item {
                 case .obsidian:
                     obsidianSettings
+                case .folder:
+                    folderSettings
                 case .custom:
                     ForwardTargetList(targets: targets)
                 }
@@ -124,6 +128,38 @@ struct EntriesPane: View {
         )
     }
 
+    /// One row, not two: the folder entry has no subfolder of its own — the
+    /// note and `附件/` land directly in the chosen folder.
+    private var folderSettings: some View {
+        VStack(spacing: 0) {
+            SettingRow(
+                title: L10n.text("目标文件夹"),
+                detail: URL(
+                    fileURLWithPath: preferences.folderDeliveryPath,
+                    isDirectory: true
+                ).lastPathComponent,
+                alignment: .center
+            ) {
+                HStack(spacing: Space.s) {
+                    Button(L10n.text("在 Finder 中显示")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([
+                            URL(fileURLWithPath: preferences.folderDeliveryPath, isDirectory: true)
+                        ])
+                    }
+                    .buttonStyle(SettingsActionButtonStyle())
+                    Button(L10n.text("选择文件夹…")) { chooseDeliveryFolder() }
+                        .buttonStyle(SettingsActionButtonStyle())
+                }
+            }
+            .padding(Space.m)
+        }
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(Theme.stroke, lineWidth: Stroke.hairline)
+        )
+    }
+
     private func chooseObsidianVault() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -134,10 +170,26 @@ struct EntriesPane: View {
         guard panel.runModal() == .OK, let folder = panel.url else { return }
         preferences.obsidianVaultPath = folder.path
     }
+
+    private func chooseDeliveryFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = L10n.text("选择目标文件夹")
+        panel.directoryURL = URL(
+            fileURLWithPath: preferences.folderDeliveryPath,
+            isDirectory: true
+        )
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        preferences.folderDeliveryPath = folder.path
+    }
 }
 
 private enum EntryConfiguration: String, Identifiable {
     case obsidian
+    case folder
     case custom
 
     var id: String { rawValue }
@@ -145,6 +197,7 @@ private enum EntryConfiguration: String, Identifiable {
     var title: String {
         switch self {
         case .obsidian: L10n.text("Obsidian 沉淀")
+        case .folder: L10n.text("文件夹沉淀")
         case .custom: L10n.text("「发送到自定义」的应用")
         }
     }

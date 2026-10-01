@@ -1,9 +1,14 @@
 import WeChatBridgeCore
 import Foundation
 
-/// Writes a WeChat archive into an Obsidian vault as Markdown plus a durable
-/// copy of the original ZIP. Keeping the archive makes a parsing change or a
-/// future converter able to rebuild the note without asking WeChat again.
+/// Writes a WeChat archive into a folder as Markdown plus a durable copy of
+/// the original ZIP. Keeping the archive makes a parsing change or a future
+/// converter able to rebuild the note without asking WeChat again.
+///
+/// Two destinations share this assembly: 「沉淀到 Obsidian」 lands the note in
+/// a subfolder of the user's vault, and 「沉淀到文件夹」 lands it directly in
+/// the folder the user picked. The note shape — `聊天名.md` plus `附件/` — is
+/// the same either way.
 enum KnowledgeDelivery {
     enum Failure: LocalizedError {
         case notConfigured
@@ -17,6 +22,8 @@ enum KnowledgeDelivery {
         }
     }
 
+    /// The Obsidian entry: the vault is what the user configured, and the note
+    /// goes into a `微信流` (or named) subfolder of it.
     @discardableResult
     static func deliver(
         urls: [URL],
@@ -25,13 +32,45 @@ enum KnowledgeDelivery {
         chatName: String?,
         sceneName: String?
     ) throws -> [URL] {
-        guard !urls.isEmpty else { throw Failure.unreadableArchive }
         let vault = URL(fileURLWithPath: vaultPath, isDirectory: true)
         try FolderDelivery.validateFolder(vault)
 
         let subfolderPath = DisplayName.subfolderPath(subfolder)
         let folderName = subfolderPath.isEmpty ? "微信流" : subfolderPath
-        let root = vault.appendingPathComponent(folderName, isDirectory: true)
+        return try write(
+            urls: urls,
+            root: vault.appendingPathComponent(folderName, isDirectory: true),
+            chatName: chatName,
+            sceneName: sceneName
+        )
+    }
+
+    /// The folder entry: the note and its `附件/` land directly in the folder,
+    /// with no subfolder of WeChatBridge's own between them.
+    @discardableResult
+    static func deliver(
+        urls: [URL],
+        folderPath: String,
+        chatName: String?,
+        sceneName: String?
+    ) throws -> [URL] {
+        let folder = URL(fileURLWithPath: folderPath, isDirectory: true)
+        try FolderDelivery.validateFolder(folder)
+        return try write(urls: urls, root: folder, chatName: chatName, sceneName: sceneName)
+    }
+
+    /// The shared assembly: one `聊天名.md` (merged when a same-named note is
+    /// already there, uniquely numbered otherwise) and `附件/` holding the
+    /// original archive plus any media unpacked from it. `root` is created if
+    /// absent; its nearest existing parent must already be writable.
+    @discardableResult
+    private static func write(
+        urls: [URL],
+        root: URL,
+        chatName: String?,
+        sceneName: String?
+    ) throws -> [URL] {
+        guard !urls.isEmpty else { throw Failure.unreadableArchive }
         let attachments = root.appendingPathComponent("附件", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: attachments, withIntermediateDirectories: true)
