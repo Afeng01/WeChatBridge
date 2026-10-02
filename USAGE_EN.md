@@ -19,7 +19,7 @@ These entries come from WeChatBridge and sit in the same menu as AirDrop, Messag
 
 ## Destinations
 
-Eleven entries cover mainstream agents, note-taking apps, and the clipboard. You can narrow or widen the list at any time.
+Twelve entries cover mainstream agents, note-taking apps, and the clipboard. You can narrow or widen the list at any time.
 
 ![Entries settings](Resources/Screenshots/usage-entries.png)
 

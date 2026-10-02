@@ -134,4 +134,63 @@ public struct BatchState: Codable, Sendable, Hashable {
                 action: action,
                 targetName: targetName
             )
-        case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness, .obsidian, .folder, .custom:
+        case .collect, .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness, .obsidian, .folder, .custom:
+            return BatchState(outcome: nil, action: action, targetName: targetName)
+        }
+    }
+
+    /// `targetName` defaults to "leave it alone": most outcomes are recorded by
+    /// code that has no opinion about the destination, and passing nil there
+    /// must not erase the name a custom forward already wrote.
+    public func withOutcome(_ outcome: BatchOutcome?, targetName: String? = nil) -> BatchState {
+        BatchState(
+            outcome: outcome,
+            action: action,
+            targetName: targetName ?? self.targetName,
+            chatName: chatName,
+            sceneID: sceneID,
+            sceneName: sceneName,
+            schemaVersion: schemaVersion
+        )
+    }
+
+    /// Records scene/group metadata without clearing anything a previous step
+    /// already wrote. Nil means "leave the existing value alone", matching the
+    /// optional-field convention used by `targetName`.
+    public func withContext(
+        chatName: String? = nil,
+        sceneID: String? = nil,
+        sceneName: String? = nil
+    ) -> BatchState {
+        BatchState(
+            outcome: outcome,
+            action: action,
+            targetName: targetName,
+            chatName: chatName ?? self.chatName,
+            sceneID: sceneID ?? self.sceneID,
+            sceneName: sceneName ?? self.sceneName,
+            schemaVersion: schemaVersion
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case outcome
+        case action
+        case targetName
+        case chatName
+        case sceneID
+        case sceneName
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        outcome = try container.decodeIfPresent(BatchOutcome.self, forKey: .outcome)
+        action = try container.decodeIfPresent(ShareAction.self, forKey: .action)
+        targetName = try container.decodeIfPresent(String.self, forKey: .targetName)
+        chatName = try container.decodeIfPresent(String.self, forKey: .chatName)
+        sceneID = try container.decodeIfPresent(String.self, forKey: .sceneID)
+        sceneName = try container.decodeIfPresent(String.self, forKey: .sceneName)
+    }
+}

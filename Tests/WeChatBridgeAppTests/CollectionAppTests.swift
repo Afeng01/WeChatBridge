@@ -3,10 +3,106 @@ import Foundation
 import XCTest
 import SwiftUI
 import os
+import UserNotifications
 @testable import WeChatBridgeApp
 import WeChatBridgeCore
 
 final class CollectionAppTests: XCTestCase {
+    @MainActor
+    func testKnowledgeDeliverySeparatesChatsWithIdenticalParticipants() async throws {
+        for action in [ShareAction.obsidian, .folder] {
+            let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let prefs = preferences()
+            let model = AppModel(preferences: prefs)
+            model.start(inbox: Inbox(root: root), watch: false, removal: .delete)
+            let destination = root.appendingPathComponent("Notes")
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            prefs.obsidianVaultPath = destination.path
+            prefs.folderDeliveryPath = destination.path
+            let first = try share(in: model.inbox!, action: .collect)
+            let second = try share(in: model.inbox!, action: .collect)
+            model.reload()
+            XCTAssertTrue(model.setBatchConversation(first, name: "研发群"))
+            XCTAssertTrue(model.setBatchConversation(second, name: "客户群"))
+            let group = try XCTUnwrap(model.collectionLedger.current)
+            let urls = try XCTUnwrap(model.freezeCollection(group.id))
+            let runner = collectionRunner(model: model, preferences: prefs)
+            let succeeded: Bool = await withCheckedContinuation { continuation in
+                runner.deliverCollection(ArrivedBatch(action: action, urls: urls), scene: nil) { success, _ in
+                    continuation.resume(returning: success)
+                }
+            }
+            XCTAssertTrue(succeeded, "Successful writes must be recognized even within the same second")
+            let notes = destination.appendingPathComponent("微信流")
+            let names = try FileManager.default.contentsOfDirectory(atPath: notes.path).filter { $0.hasSuffix(".md") }
+            XCTAssertEqual(Set(names), ["研发群的聊天.md", "客户群的聊天.md"])
+            for name in ["研发群", "客户群"] {
+                let text = try String(contentsOf: notes.appendingPathComponent(name + "的聊天.md"), encoding: .utf8)
+                XCTAssertTrue(text.contains("chat: \"" + name + "\""))
+                XCTAssertTrue(text.contains("messages: 100"))
+            }
+            XCTAssertEqual(model.batchConversation(first), "研发群")
+            XCTAssertEqual(model.batchConversation(second), "客户群")
+        }
+    }
+
+    @MainActor
+    func testKnowledgeDeliveryMergesBatchesFromTheSameSavedChat() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let prefs = preferences()
+        let model = AppModel(preferences: prefs)
+        model.start(inbox: Inbox(root: root), watch: false, removal: .delete)
+        let destination = root.appendingPathComponent("Notes")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        prefs.obsidianVaultPath = destination.path
+        let first = try share(in: model.inbox!, action: .collect)
+        let second = try share(in: model.inbox!, action: .collect, messageCount: 86)
+        model.reload()
+        XCTAssertTrue(model.setBatchConversation(first, name: "产品讨论群"))
+        XCTAssertTrue(model.setBatchConversation(second, name: "产品讨论群"))
+        let group = try XCTUnwrap(model.collectionLedger.current)
+        let urls = try XCTUnwrap(model.freezeCollection(group.id))
+        let runner = collectionRunner(model: model, preferences: prefs)
+        let succeeded: Bool = await withCheckedContinuation { continuation in
+            runner.deliverCollection(ArrivedBatch(action: .obsidian, urls: urls), scene: nil) { success, _ in
+                continuation.resume(returning: success)
+            }
+        }
+        XCTAssertTrue(succeeded)
+        let notes = destination.appendingPathComponent("微信流")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: notes.path).filter { $0.hasSuffix(".md") }, ["产品讨论群的聊天.md"])
+        let text = try String(contentsOf: notes.appendingPathComponent("产品讨论群的聊天.md"), encoding: .utf8)
+        XCTAssertTrue(text.contains("messages: 100"), "Overlapping batches must remain deduplicated")
+    }
+
+    @MainActor
+    func testGroupingPreservesSourceOrderAndRequiresEveryChatName() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = AppModel(preferences: preferences())
+        model.start(inbox: Inbox(root: root), watch: false, removal: .delete)
+        let ids = try (0..<3).map { _ in try share(in: model.inbox!, action: .collect) }
+        model.reload()
+        let urls = try ids.map { try XCTUnwrap(model.batch(id: $0)?.items.first?.url) }
+        XCTAssertTrue(model.setBatchConversation(ids[0], name: "研发群"))
+        XCTAssertTrue(model.setBatchConversation(ids[2], name: "研发群"))
+        XCTAssertNil(model.collectionConversations(for: urls))
+        XCTAssertTrue(model.setBatchConversation(ids[1], name: "客户群"))
+        let grouped = try XCTUnwrap(model.collectionConversations(for: urls))
+        XCTAssertEqual(grouped.map(\.name), ["研发群", "客户群"])
+        XCTAssertEqual(grouped.map(\.urls), [[urls[0], urls[2]], [urls[1]]])
+        XCTAssertNil(model.collectionConversations(for: [root.appendingPathComponent("missing.zip")]))
+    }
+
+    @MainActor
+    private func collectionRunner(model: AppModel, preferences: Preferences) -> ActionRunner {
+        ActionRunner(model: model, authorization: AccessibilityAuthorization(), targets: ForwardTargets(),
+                     preferences: preferences, sceneCoordinator: SceneCoordinator(preferences: preferences),
+                     skills: SkillLibrary(), notifier: DeliveryNotifier(center: CollectionTestNotificationCenter()))
+    }
+
     @MainActor
     func testAutomaticConversationRecognitionRunsWithoutForegroundGate() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
@@ -293,4 +389,11 @@ final class CollectionAppTests: XCTestCase {
         _ = try staging.commit(manifest: BatchManifest(batchID: staging.batchID, createdAt: Date(), items: [item], action: action), diagnostics: nil, intent: action.needsIntent ? BatchIntent(action: action, requestedAt: Date()) : nil, in: inbox)
         return staging.batchID
     }
+}
+
+private final class CollectionTestNotificationCenter: DeliveryNotificationCenter {
+    weak var delegate: UNUserNotificationCenterDelegate?
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>) {}
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool { false }
+    func add(_ request: UNNotificationRequest) async throws {}
 }

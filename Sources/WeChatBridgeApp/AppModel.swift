@@ -248,6 +248,30 @@ final class AppModel: ObservableObject {
         Set(items(for: urls).map(\.batchID))
     }
 
+    struct CollectionConversation {
+        let name: String
+        var urls: [URL]
+    }
+
+    /// Keep the collection's original order while grouping its files by the
+    /// saved conversation name. Missing context must never silently merge chats.
+    func collectionConversations(for urls: [URL]) -> [CollectionConversation]? {
+        guard !urls.isEmpty else { return nil }
+        let sources = Dictionary(items(for: urls).map { ($0.url.standardizedFileURL.path, $0.batchID) },
+                                 uniquingKeysWith: { first, _ in first })
+        var conversations: [CollectionConversation] = []
+        for url in urls {
+            guard let id = sources[url.standardizedFileURL.path],
+                  let name = batchConversation(id) else { return nil }
+            if let index = conversations.firstIndex(where: { $0.name == name }) {
+                conversations[index].urls.append(url)
+            } else {
+                conversations.append(CollectionConversation(name: name, urls: [url]))
+            }
+        }
+        return conversations
+    }
+
     private func items(for urls: [URL]) -> [ReadyItem] {
         let paths = Set(urls.map(\.standardizedFileURL.path))
         return batches.flatMap(\.items).filter { paths.contains($0.url.standardizedFileURL.path) }
