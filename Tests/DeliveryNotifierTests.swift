@@ -1,26 +1,32 @@
-// Standalone app-helper tests; no app launch or Package.swift change needed.
-// After `swift build`:
-// test_output="$(mktemp -d /tmp/wechatbridge-notifier-tests.XXXXXX)"
-// test_sdk="$(xcode-select -p)/Platforms/MacOSX.platform/Developer"
-// mise exec -- swiftc -swift-version 5 -D DELIVERY_NOTIFIER_TEST_MAIN \
-//   -I .build/debug -F "$test_sdk/Library/Frameworks" -L "$test_sdk/usr/lib" \
-//   -Xlinker -rpath -Xlinker "$test_sdk/Library/Frameworks" \
-//   -Xlinker -rpath -Xlinker "$test_sdk/usr/lib" \
-//   .build/debug/WeChatBridgeCore.o -lz \
-//   Sources/WeChatBridgeApp/Feedback/DeliveryNotifier.swift Tests/DeliveryNotifierTests.swift \
-//   -o "$test_output/runner"
-// "$test_output/runner"
-//
-// What is not here: `notify`, the authorization prompt, the category
-// registration and the action callback are the notification centre's system
-// behaviour — they only run inside a bundled, signed app, not a bare test
-// runner. The part this file can pin down is the round trip the callback
-// depends on: the paths written into userInfo must come back out unchanged,
-// whatever characters the folder names carry.
+@testable import WeChatBridgeApp
 import WeChatBridgeCore
 import XCTest
+import UserNotifications
 
 final class DeliveryNotifierTests: XCTestCase {
+    @MainActor
+    func testStartupRegistersActionsBeforeAnyNewDelivery() {
+        let center = TestNotificationCenter()
+        let notifier = DeliveryNotifier(center: center)
+        notifier.configure()
+        XCTAssertTrue(center.delegate === notifier)
+        XCTAssertEqual(Set(center.categories.map(\.identifier)), [DeliveryNotifier.categoryIdentifier])
+        XCTAssertEqual(center.categories.first?.actions.first?.identifier, DeliveryNotifier.revealActionIdentifier)
+    }
+
+    @MainActor
+    func testRestartReplacesDelegateWithoutSendingANewNotification() {
+        let center = TestNotificationCenter()
+        var previous: DeliveryNotifier? = DeliveryNotifier(center: center)
+        previous?.configure()
+        previous = nil
+        XCTAssertNil(center.delegate)
+        let restarted = DeliveryNotifier(center: center)
+        restarted.configure()
+        XCTAssertTrue(center.delegate === restarted)
+        XCTAssertEqual(center.registrationCount, 2)
+    }
+
     func testRoundTripPreservesPathsOfEveryShape() {
         let notes = [
             URL(fileURLWithPath: "/Users/甲/沉淀/微信群 聊天记录.md"),
@@ -52,13 +58,15 @@ final class DeliveryNotifierTests: XCTestCase {
     }
 }
 
-#if DELIVERY_NOTIFIER_TEST_MAIN
-@main
-enum DeliveryNotifierTestRunner {
-    static func main() {
-        let suite = DeliveryNotifierTests.defaultTestSuite
-        suite.run()
-        guard let run = suite.testRun, run.executionCount > 0, run.hasSucceeded else { exit(1) }
+
+private final class TestNotificationCenter: DeliveryNotificationCenter {
+    weak var delegate: UNUserNotificationCenterDelegate?
+    private(set) var categories = Set<UNNotificationCategory>()
+    private(set) var registrationCount = 0
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool { false }
+    func add(_ request: UNNotificationRequest) async throws {}
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>) {
+        self.categories = categories
+        registrationCount += 1
     }
 }
-#endif

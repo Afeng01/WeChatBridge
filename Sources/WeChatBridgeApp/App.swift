@@ -165,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runner.openEntries = { [weak self] in self?.openMainWindow(.entries) }
         runner.openSkills = { [weak self] in self?.openMainWindow(.skills) }
         actionRunner = runner
+        runner.configureNotifications()
         sceneShortcuts = SceneShortcutController(preferences: preferences)
 
         // One place decides what an arriving batch means.

@@ -1,16 +1,4 @@
-// Standalone app-helper tests; no app launch or Package.swift change needed.
-// After `swift build`:
-// test_output="$(mktemp -d /tmp/wechatbridge-knowledge-tests.XXXXXX)"
-// test_sdk="$(xcode-select -p)/Platforms/MacOSX.platform/Developer"
-// mise exec -- swiftc -swift-version 5 -D KNOWLEDGE_DELIVERY_TEST_MAIN \
-//   -I .build/debug -F "$test_sdk/Library/Frameworks" -L "$test_sdk/usr/lib" \
-//   -Xlinker -rpath -Xlinker "$test_sdk/Library/Frameworks" \
-//   -Xlinker -rpath -Xlinker "$test_sdk/usr/lib" \
-//   .build/debug/WeChatBridgeCore.o -lz \
-//   Sources/WeChatBridgeApp/FolderDelivery.swift Sources/WeChatBridgeApp/KnowledgeDelivery.swift \
-//   Tests/KnowledgeDeliveryTests.swift \
-//   -o "$test_output/runner"
-// "$test_output/runner"
+@testable import WeChatBridgeApp
 import Foundation
 import WeChatBridgeCore
 import XCTest
@@ -128,14 +116,3 @@ final class KnowledgeDeliveryTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: vault.appendingPathComponent("参考/微信流/附件/聊天记录.zip").path))
     }
 }
-
-#if KNOWLEDGE_DELIVERY_TEST_MAIN
-@main
-enum KnowledgeDeliveryTestRunner {
-    static func main() {
-        let suite = KnowledgeDeliveryTests.defaultTestSuite
-        suite.run()
-        guard let run = suite.testRun, run.executionCount > 0, run.hasSucceeded else { exit(1) }
-    }
-}
-#endif
