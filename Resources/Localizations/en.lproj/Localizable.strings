@@ -51,9 +51,10 @@
 "文件夹" = "the folder";
 "剪贴板" = "the clipboard";
 
-/* Folder delivery — lands quietly, so its success gets said */
+/* Knowledge deliveries — land quietly, so their success gets said */
 "已保存到 %@" = "Saved to %@";
 "在访达中显示" = "Reveal in Finder";
+"打开笔记" = "Open Note";
 
 /* Share extension — no interface; only a failure still speaks */
 "系统没有返回文件。" = "The system returned no file.";

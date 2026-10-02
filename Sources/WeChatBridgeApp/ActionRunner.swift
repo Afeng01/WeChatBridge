@@ -12,11 +12,14 @@ import Foundation
 ///
 /// Success is silent. Every paste destination ends with the result in front of
 /// the user — the share sheet's own 「已复制」 or the pasted files in the target
-/// app — so the only thing left to report is a failure. 「沉淀到文件夹」 is the
-/// one exception: nothing appears on screen when a note lands in a folder, so
-/// it gets the one success report — a system notification, which shows even
-/// while this app sits in the background where a self-drawn capsule cannot
-/// (see `DeliveryNotifier`).
+/// app — so the only thing left to report is a failure. The knowledge
+/// destinations are the exception: nothing appears on screen when a note lands
+/// in a folder or a vault, so each gets the one success report — a system
+/// notification carrying the way in, which shows even while this app sits in
+/// the background where a self-drawn capsule cannot (see `DeliveryNotifier`).
+/// 「沉淀到 Obsidian」 used to open the note itself instead — claiming the
+/// foreground on every delivery and racing Obsidian's indexing of the
+/// brand-new file — and now behaves like its sibling: quiet, one tap away.
 @MainActor
 final class ActionRunner {
     /// Opens 设置 → 入口, which is the only place the 「发送到自定义」 list can be
@@ -230,7 +233,11 @@ final class ActionRunner {
     }
 
     /// Obsidian is not a paste destination: it needs the archive turned into a
-    /// note and copied into the user's vault before the record can say delivered.
+    /// note and copied into the user's vault before the record can say
+    /// delivered. The note does not open itself: a delivery never yanks the
+    /// user out of whatever they were doing, and the notification's
+    /// 「打开笔记」 is the way in — see `DeliveryNotifier` for why the open
+    /// could not stay here (Issue #17).
     private func deliverToObsidian(
         _ arrival: ArrivedBatch,
         context: SceneCoordinator.Selection
@@ -254,9 +261,9 @@ final class ActionRunner {
                 chatName: context.groupName,
                 sceneName: context.scene?.name
             )
-            openInObsidian(notes, vaultPath: vaultPath)
             model.recordDelivery(urls: arrival.urls, action: .obsidian)
             sceneCoordinator.advance(context)
+            await notifier.notify(savedToVault: vaultPath, notes: notes)
         } catch {
             fallBack(
                 arrival,
@@ -296,23 +303,6 @@ final class ActionRunner {
                 arrival,
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             )
-        }
-    }
-
-    private func openInObsidian(_ notes: [URL], vaultPath: String) {
-        let vault = URL(fileURLWithPath: vaultPath, isDirectory: true).standardizedFileURL
-        let prefix = vault.path.hasSuffix("/") ? vault.path : vault.path + "/"
-        for note in notes {
-            let path = note.standardizedFileURL.path
-            guard path.hasPrefix(prefix) else { continue }
-            var components = URLComponents()
-            components.scheme = "obsidian"
-            components.host = "open"
-            components.queryItems = [
-                URLQueryItem(name: "vault", value: vault.lastPathComponent),
-                URLQueryItem(name: "file", value: String(path.dropFirst(prefix.count))),
-            ]
-            if let url = components.url { NSWorkspace.shared.open(url) }
         }
     }
 

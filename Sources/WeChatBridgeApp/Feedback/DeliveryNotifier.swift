@@ -13,30 +13,43 @@ protocol DeliveryNotificationCenter: AnyObject {
 
 extension UNUserNotificationCenter: DeliveryNotificationCenter {}
 
-/// The success report for 「沉淀到文件夹」: a system notification, not a
-/// corner capsule.
+/// The success report for the knowledge destinations: a system notification,
+/// not a corner capsule.
 ///
-/// A folder delivery always happens with WeChatBridge in the background — the
-/// share extension triggered it — and macOS will not render a background app's
-/// own windows: the capsule's `show` ran, its frame was right,
+/// A knowledge delivery always happens with WeChatBridge in the background —
+/// the share extension triggered it — and macOS will not render a background
+/// app's own windows: the capsule's `show` ran, its frame was right,
 /// `orderFrontRegardless` and a hard `NSApp.activate(true)` were tried, and
 /// nothing appeared. The notification centre is a separate process and shows
-/// the banner whatever owns the foreground; its action buttons give the
-/// 「在访达中显示」 jump the toast used to carry.
+/// the banner whatever owns the foreground; its action buttons carry the jump
+/// to what just landed — 「在访达中显示」 for 「沉淀到文件夹」, 「打开笔记」 for
+/// 「沉淀到 Obsidian」.
+///
+/// Obsidian used to open the note itself the moment it landed. That reached
+/// for the foreground on every delivery whether the user wanted it or not,
+/// and it raced Obsidian's own indexing of the brand-new file — the
+/// 「找不到文件」 of Issue #17. Both knowledge destinations now behave alike:
+/// quiet on success, with the one-tap way in sitting on the notification.
 ///
 /// Failures keep the toast (`ToastPresenter`): they usually arrive while the
 /// user is working in WeChatBridge's own settings window, where a self-drawn
 /// capsule does appear.
 @MainActor
 final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
-    nonisolated static let categoryIdentifier = "folderDelivery"
+    nonisolated static let folderCategoryIdentifier = "folderDelivery"
     nonisolated static let revealActionIdentifier = "revealInFinder"
+    nonisolated static let obsidianCategoryIdentifier = "obsidianDelivery"
+    nonisolated static let openNoteActionIdentifier = "openInObsidian"
 
-    /// The userInfo key that carries the note paths an action replays. Plain
-    /// path strings, not anything richer: userInfo crosses into the
-    /// notification centre's own storage and back, and strings make that round
-    /// trip lossless.
+    /// The userInfo keys that carry what an action replays. Plain strings, not
+    /// anything richer: userInfo crosses into the notification centre's own
+    /// storage and back, and strings make that round trip lossless. A folder
+    /// notification carries absolute note paths for Finder; an Obsidian one
+    /// carries the vault name and vault-relative paths — the shape the
+    /// `obsidian://open` scheme asks for.
     private nonisolated static let revealPathsKey = "revealPaths"
+    private nonisolated static let obsidianVaultKey = "obsidianVault"
+    private nonisolated static let obsidianFilesKey = "obsidianFiles"
 
     private var isConfigured = false
     private let providedCenter: (any DeliveryNotificationCenter)?
@@ -49,9 +62,43 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
         super.init()
     }
 
-    /// `folderName` lands in the title; `notes` come back when the action is
-    /// clicked. Asking for permission here — not at launch — means the prompt
-    /// appears at the first delivery, when the user has a reason to answer it;
+    /// The folder delivery's notice: `folderName` lands in the title, `notes`
+    /// come back when 「在访达中显示」 is clicked.
+    func notify(savedTo folderName: String, revealing notes: [URL]) async {
+        await add(
+            title: L10n.format("已保存到 %@", folderName),
+            category: Self.folderCategoryIdentifier,
+            userInfo: Self.userInfo(forRevealing: notes)
+        )
+    }
+
+    /// The Obsidian delivery's notice. The vault-relative paths are worked out
+    /// here, at the only moment the vault path is at hand, so that 「打开笔记」
+    /// can rebuild its URL however much later it is clicked without reading
+    /// any preferences. A note that somehow landed outside the vault has no
+    /// obsidian URL to open, and a notification whose button does nothing is
+    /// worse than silence, so such a delivery stays quiet — the old auto-open
+    /// skipped those notes the same way.
+    func notify(savedToVault vaultPath: String, notes: [URL]) async {
+        let vault = URL(fileURLWithPath: vaultPath, isDirectory: true).standardizedFileURL
+        let prefix = vault.path.hasSuffix("/") ? vault.path : vault.path + "/"
+        let files = notes.compactMap { note -> String? in
+            let path = note.standardizedFileURL.path
+            guard path.hasPrefix(prefix) else { return nil }
+            return String(path.dropFirst(prefix.count))
+        }
+        guard !files.isEmpty else { return }
+        await add(
+            title: L10n.format("已保存到 %@", vault.lastPathComponent),
+            category: Self.obsidianCategoryIdentifier,
+            userInfo: Self.userInfo(forOpeningIn: vault.lastPathComponent, files: files)
+        )
+    }
+
+    // MARK: - Adding a notice
+
+    /// Asking for permission here — not at launch — means the prompt appears
+    /// at the first delivery, when the user has a reason to answer it;
     /// `requestAuthorization` only prompts while the choice is undecided, so
     /// this is silent from the second delivery on. A refusal also returns
     /// immediately and quietly: the delivery itself succeeded, and the notice
@@ -61,7 +108,7 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// which holds the delivery queue behind it — harmless, because the modal
     /// prompt has the user's attention anyway, and it never appears again once
     /// answered.
-    func notify(savedTo folderName: String, revealing notes: [URL]) async {
+    private func add(title: String, category: String, userInfo: [AnyHashable: Any]) async {
         configure()
 
         let center = self.center
@@ -71,17 +118,17 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
         // No sound asked for, and only `.alert` in the authorization: this is
         // an "it worked" banner, not an alarm; its visual presence is the
         // whole message.
-        content.title = L10n.format("已保存到 %@", folderName)
-        content.categoryIdentifier = Self.categoryIdentifier
-        content.userInfo = Self.userInfo(forRevealing: notes)
+        content.title = title
+        content.categoryIdentifier = category
+        content.userInfo = userInfo
         try? await center.add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         )
     }
 
-    // MARK: - Reveal round trip
+    // MARK: - Action round trips
 
-    /// The encode side of the only userInfo this notifier writes.
+    /// The encode side of the folder notification's userInfo.
     nonisolated static func userInfo(forRevealing notes: [URL]) -> [AnyHashable: Any] {
         [revealPathsKey: notes.map(\.path)]
     }
@@ -92,18 +139,49 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
         (userInfo[revealPathsKey] as? [String])?.map { URL(fileURLWithPath: $0) } ?? []
     }
 
+    /// The encode side of the Obsidian notification's userInfo.
+    nonisolated static func userInfo(
+        forOpeningIn vault: String,
+        files: [String]
+    ) -> [AnyHashable: Any] {
+        [obsidianVaultKey: vault, obsidianFilesKey: files]
+    }
+
+    /// The decode side of the Obsidian notification's userInfo: the
+    /// `obsidian://open` URLs for every note, ready to hand to the workspace.
+    nonisolated static func obsidianURLs(from userInfo: [AnyHashable: Any]) -> [URL] {
+        guard let vault = userInfo[obsidianVaultKey] as? String,
+              let files = userInfo[obsidianFilesKey] as? [String]
+        else { return [] }
+        return files.compactMap { obsidianURL(vault: vault, file: $0) }
+    }
+
+    /// The `obsidian://open` URL for one vault-relative note. `URLComponents`
+    /// percent-encodes the query, which is what lets vault and file names
+    /// carrying spaces, CJK, or the reserved 「?」「#」「&」 survive the handoff
+    /// to Obsidian.
+    nonisolated static func obsidianURL(vault: String, file: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "obsidian"
+        components.host = "open"
+        components.queryItems = [
+            URLQueryItem(name: "vault", value: vault),
+            URLQueryItem(name: "file", value: file),
+        ]
+        return components.url
+    }
+
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// Called during application startup so actions on previously delivered
-    /// notifications work after a restart, before another note is saved.
-    /// Authorization is still requested only when a new delivery succeeds.
+    /// Register while the application launches so actions on retained folder
+    /// and Obsidian notifications work before another note is saved.
     func configure() {
         guard !isConfigured else { return }
         isConfigured = true
         let center = self.center
         center.setNotificationCategories([
             UNNotificationCategory(
-                identifier: Self.categoryIdentifier,
+                identifier: Self.folderCategoryIdentifier,
                 actions: [
                     UNNotificationAction(
                         identifier: Self.revealActionIdentifier,
@@ -111,7 +189,17 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
                     )
                 ],
                 intentIdentifiers: []
-            )
+            ),
+            UNNotificationCategory(
+                identifier: Self.obsidianCategoryIdentifier,
+                actions: [
+                    UNNotificationAction(
+                        identifier: Self.openNoteActionIdentifier,
+                        title: L10n.text("打开笔记")
+                    )
+                ],
+                intentIdentifiers: []
+            ),
         ])
         // The centre holds its delegate weakly; `ActionRunner` owns this
         // notifier for the app's lifetime, so the callback has somewhere to
@@ -119,23 +207,32 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
         center.delegate = self
     }
 
-    /// Both the button and a bare click on the banner mean "take me there";
-    /// a dismissal does not. The callback can arrive off the main thread.
+    /// Both the buttons and a bare click on the banner mean "take me there";
+    /// a dismissal does not. Which "there" is decided by what the notification
+    /// carries, not by which action fired — the decode sides answer that, and
+    /// anything unexpected decodes to nothing. The callback can arrive off the
+    /// main thread.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         guard response.actionIdentifier == Self.revealActionIdentifier
+            || response.actionIdentifier == Self.openNoteActionIdentifier
             || response.actionIdentifier == UNNotificationDefaultActionIdentifier
         else {
             completionHandler()
             return
         }
-        let notes = Self.revealPaths(from: response.notification.request.content.userInfo)
+        let userInfo = response.notification.request.content.userInfo
         Task { @MainActor in
+            let notes = Self.revealPaths(from: userInfo)
             if !notes.isEmpty {
                 NSWorkspace.shared.activateFileViewerSelecting(notes)
+            } else {
+                for url in Self.obsidianURLs(from: userInfo) {
+                    NSWorkspace.shared.open(url)
+                }
             }
             completionHandler()
         }
