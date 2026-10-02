@@ -19,8 +19,8 @@ plutil -lint "$APP_INFO" "$SHARE_INFO" "$APP_ENTITLEMENTS" "$SHARE_ENTITLEMENTS"
 plutil -lint "$ROOT"/Resources/Localizations/*/*.strings "$ROOT"/Resources/ShareLocalizations/*/*/*.strings >/dev/null
 python3 -m json.tool "$ROOT/Resources/Skills/catalog.json" >/dev/null
 
-if [ "${#SHARE_SLOTS[@]}" -ne 11 ]; then
-	echo "expected 11 Share-menu entries, found ${#SHARE_SLOTS[@]}" >&2
+if [ "${#SHARE_SLOTS[@]}" -ne 12 ]; then
+	echo "expected 12 Share-menu entries, found ${#SHARE_SLOTS[@]}" >&2
 	exit 1
 fi
 

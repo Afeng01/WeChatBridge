@@ -16,7 +16,7 @@ final class ShareActionTests: XCTestCase {
     }
 
     func testOnlyForwardingActionsNameATargetApp() {
-        XCTAssertEqual(ShareAction.allCases.count, 11)
+        XCTAssertEqual(ShareAction.allCases.count, 12)
         XCTAssertEqual(ShareAction.codex.targetBundleIdentifier, "com.openai.codex")
         XCTAssertEqual(ShareAction.claude.targetBundleIdentifier, "com.anthropic.claudefordesktop")
         XCTAssertEqual(ShareAction.doubao.targetBundleIdentifier, "com.bot.pc.doubao")

@@ -38,7 +38,7 @@ final class ActionRunner {
     private let sceneCoordinator: SceneCoordinator
     private let skills: SkillLibrary
     private let toast = ToastPresenter()
-    private let notifier = DeliveryNotifier()
+    private let notifier: DeliveryNotifier
     private let picker = TargetPickerPanel()
     /// The forward currently in flight, so the next one waits for it.
     ///
@@ -59,7 +59,8 @@ final class ActionRunner {
         targets: ForwardTargets,
         preferences: Preferences,
         sceneCoordinator: SceneCoordinator,
-        skills: SkillLibrary
+        skills: SkillLibrary,
+        notifier: DeliveryNotifier? = nil
     ) {
         self.model = model
         self.authorization = authorization
@@ -67,6 +68,7 @@ final class ActionRunner {
         self.preferences = preferences
         self.sceneCoordinator = sceneCoordinator
         self.skills = skills
+        self.notifier = notifier ?? DeliveryNotifier()
     }
 
     func enqueueExclusive(_ operation: @escaping @MainActor () async -> Void) {
@@ -80,6 +82,8 @@ final class ActionRunner {
 
     func handle(_ arrival: ArrivedBatch) {
         switch arrival.action {
+        case .collect:
+            return
         case .clipboard:
             // Reached from 记录's own 复制到剪贴板 and from an intent an older
             // extension build wrote. A share made with this build never gets
@@ -132,6 +136,54 @@ final class ActionRunner {
                     await self.deliver(arrival, askingNear: pointer, context: context)
                 }
             }
+        }
+    }
+
+    /// A collection already chose its scene and target in one panel. Reuse the
+    /// paste queue, without inspecting WeChat or presenting another picker.
+    func deliverCollection(_ arrival: ArrivedBatch, scene: WeChatScene?, completion: @escaping (Bool, String?) -> Void) {
+        enqueueExclusive { [weak self] in
+            guard let self else { return }
+            // Batch outcomes use ISO8601 seconds on disk. Match that precision
+            // when checking a fast delivery that completes in the same second.
+            let started = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))
+            guard arrival.isFresh else {
+                self.model.recordExpired(urls: arrival.urls)
+                completion(false, L10n.text("等待交付超时，原始文件已保留。请重新选择目标。"))
+                return
+            }
+            guard let conversations = self.model.collectionConversations(for: arrival.urls) else {
+                completion(false, L10n.text("请先补充每批的群名或聊天人。"))
+                return
+            }
+            var context = SceneCoordinator.Selection(
+                scenes: scene.map { [$0] } ?? [],
+                groupName: conversations.count == 1 ? conversations[0].name : nil
+            )
+            if scene != nil {
+                context.insights = await Task.detached(priority: .utility) {
+                    (try? WeChatBatchInsightsReader.read(urls: arrival.urls)) ?? WeChatBatchInsights()
+                }.value
+            }
+            if arrival.action == .obsidian || arrival.action == .folder {
+                for conversation in conversations {
+                    var namedContext = context
+                    namedContext.groupName = conversation.name
+                    let namedArrival = ArrivedBatch(
+                        action: arrival.action,
+                        target: arrival.target,
+                        urls: conversation.urls,
+                        requestedAt: arrival.requestedAt
+                    )
+                    await self.deliver(namedArrival, askingNear: NSEvent.mouseLocation, context: namedContext)
+                }
+            } else {
+                await self.deliver(arrival, askingNear: NSEvent.mouseLocation, context: context)
+            }
+            let outcomes = self.model.batchIDs(for: arrival.urls).compactMap { self.model.batch(id: $0)?.outcome }
+            let success = !outcomes.isEmpty && outcomes.count == self.model.batchIDs(for: arrival.urls).count
+                && outcomes.allSatisfy { $0.kind == .delivered && $0.at >= started }
+            completion(success, outcomes.first(where: { $0.kind == .failed || $0.kind == .expired })?.detail)
         }
     }
 
