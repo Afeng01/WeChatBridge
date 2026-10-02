@@ -74,6 +74,10 @@ final class ActionRunner {
         pending = Task { await previous?.value; await operation() }
     }
 
+    func configureNotifications() {
+        notifier.configure()
+    }
+
     func handle(_ arrival: ArrivedBatch) {
         switch arrival.action {
         case .clipboard:

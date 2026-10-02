@@ -2,6 +2,17 @@ import AppKit
 import UserNotifications
 import WeChatBridgeCore
 
+/// The registration surface lets startup wiring be checked without asking the
+/// system notification service from an unbundled test runner.
+protocol DeliveryNotificationCenter: AnyObject {
+    var delegate: UNUserNotificationCenterDelegate? { get set }
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>)
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func add(_ request: UNNotificationRequest) async throws
+}
+
+extension UNUserNotificationCenter: DeliveryNotificationCenter {}
+
 /// The success report for the knowledge destinations: a system notification,
 /// not a corner capsule.
 ///
@@ -41,6 +52,15 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
     private nonisolated static let obsidianFilesKey = "obsidianFiles"
 
     private var isConfigured = false
+    private let providedCenter: (any DeliveryNotificationCenter)?
+    private var center: any DeliveryNotificationCenter {
+        providedCenter ?? UNUserNotificationCenter.current()
+    }
+
+    init(center: (any DeliveryNotificationCenter)? = nil) {
+        providedCenter = center
+        super.init()
+    }
 
     /// The folder delivery's notice: `folderName` lands in the title, `notes`
     /// come back when 「在访达中显示」 is clicked.
@@ -89,9 +109,9 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// prompt has the user's attention anyway, and it never appears again once
     /// answered.
     private func add(title: String, category: String, userInfo: [AnyHashable: Any]) async {
-        configureOnce()
+        configure()
 
-        let center = UNUserNotificationCenter.current()
+        let center = self.center
         guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }
 
         let content = UNMutableNotificationContent()
@@ -153,13 +173,12 @@ final class DeliveryNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// The categories and the delegate both land here, once, on the way to
-    /// the first notification — there is nothing to configure before the
-    /// first delivery, and this object lives as long as the app does.
-    private func configureOnce() {
+    /// Register while the application launches so actions on retained folder
+    /// and Obsidian notifications work before another note is saved.
+    func configure() {
         guard !isConfigured else { return }
         isConfigured = true
-        let center = UNUserNotificationCenter.current()
+        let center = self.center
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Self.folderCategoryIdentifier,
