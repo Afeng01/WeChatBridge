@@ -18,6 +18,9 @@ struct ShareEntryList: View {
     /// Settings uses terse state; onboarding keeps the explanatory copy.
     var compactDetails = false
     var obsidianVaultPath: String?
+    /// Where 「沉淀到文件夹」 lands its notes; unlike the vault it always has a
+    /// value, so the row can name the folder straight away.
+    var folderPath = ""
     var customTargetCount = 0
     var configure: ((ShareAction) -> Void)?
 
@@ -70,8 +73,8 @@ struct ShareEntryList: View {
             HStack(spacing: Space.s) {
                 if compactDetails,
                    let configure,
-                   action == .obsidian || action == .custom {
-                    Button(action == .obsidian ? L10n.text("设置…") : L10n.text("管理…")) {
+                   action == .obsidian || action == .folder || action == .custom {
+                    Button(action == .custom ? L10n.text("管理…") : L10n.text("设置…")) {
                         configure(action)
                     }
                     .buttonStyle(SettingsActionButtonStyle())
@@ -162,81 +165,4 @@ struct ShareEntryList: View {
         case .workBuddy: file = "06-workbuddy.png"
         case .weSight: file = "07-wesight.png"
         case .obsidian: file = "05-obsidian.png"
-        case .deepSeekHarness, .collect, .clipboard, .custom: return nil
-        }
-        guard let url = Bundle.main.url(
-            forResource: file,
-            withExtension: nil,
-            subdirectory: "AppLogos"
-        ) else { return nil }
-        return NSImage(contentsOf: url)
-    }
-
-    /// Not private: the guide's art column draws the same menu, and a second
-    /// table of symbols would be a second answer to "which icon is this entry".
-    static func symbol(for action: ShareAction) -> String {
-        switch action {
-        case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness: "paperplane"
-        case .obsidian: "book.closed"
-        case .collect: "tray.and.arrow.down"
-        case .clipboard: "doc.on.clipboard"
-        case .custom: "paperplane.circle"
-        }
-    }
-
-    private func detail(for action: ShareAction) -> String {
-        if compactDetails {
-            switch action {
-            case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness:
-                guard let bundleIdentifier = action.targetBundleIdentifier else {
-                    return L10n.text("未安装")
-                }
-                return InstalledApp.lookup(bundleIdentifier).isInstalled
-                    ? L10n.text("已安装")
-                    : L10n.text("未安装")
-            case .obsidian:
-                return obsidianVaultPath.map {
-                    URL(fileURLWithPath: $0, isDirectory: true).lastPathComponent
-                } ?? L10n.text("未选择知识库")
-            case .collect:
-                return L10n.text("多次分享，收齐后一起发送")
-            case .clipboard:
-                return L10n.text("只复制，不自动粘贴")
-            case .custom:
-                return customTargetCount == 0
-                    ? L10n.text("未添加应用")
-                    : L10n.format("%d 个应用", customTargetCount)
-            }
-        }
-
-        switch action {
-        case .codex: return L10n.text("激活 ChatGPT 并直接粘贴到输入框。")
-        case .claude: return L10n.text("激活 Claude 并直接粘贴到输入框。")
-        case .doubao: return L10n.text("激活豆包并直接粘贴到输入框。")
-        case .qwen: return L10n.text("激活千问办公并直接粘贴到输入框。")
-        case .workBuddy: return L10n.text("激活 WorkBuddy 并直接粘贴到输入框。")
-        case .weSight: return L10n.text("激活 WeSight 并直接粘贴到输入框。")
-        case .deepSeekHarness: return L10n.text("激活 DeepSeek Harness 并直接粘贴到输入框。")
-        case .obsidian: return L10n.text("把聊天记录转成 Markdown，写入选定的 Obsidian 知识库。")
-        case .collect: return L10n.text("多次分享，收齐后一起发送")
-        case .clipboard: return L10n.text("只放进剪贴板，去哪儿按 ⌘V 由你决定。")
-        case .custom: return L10n.text("转发时从你自己的清单里挑一个 App，激活它并粘贴。")
-        }
-    }
-
-    private func detailIsWarning(for action: ShareAction) -> Bool {
-        guard compactDetails else { return false }
-        switch action {
-        case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness:
-            return action.targetBundleIdentifier.map {
-                !InstalledApp.lookup($0).isInstalled
-            } ?? true
-        case .obsidian:
-            return obsidianVaultPath == nil
-        case .custom:
-            return customTargetCount == 0
-        case .collect, .clipboard:
-            return false
-        }
-    }
-}
+        case .folder: return L10n.text("把聊天记录转成 Markdown 和附件，写入选定的文件夹。")

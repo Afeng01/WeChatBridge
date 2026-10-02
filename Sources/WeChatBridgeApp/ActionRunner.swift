@@ -10,9 +10,16 @@ import Foundation
 /// files and records the request; this runs it, in the app, where a failure has
 /// somewhere to be reported.
 ///
-/// Success is silent. Every destination ends with the result in front of the
-/// user — the share sheet's own 「已复制」 or the pasted files in the target app
-/// — so the only thing left to report is a failure.
+/// Success is silent. Every paste destination ends with the result in front of
+/// the user — the share sheet's own 「已复制」 or the pasted files in the target
+/// app — so the only thing left to report is a failure. The knowledge
+/// destinations are the exception: nothing appears on screen when a note lands
+/// in a folder or a vault, so each gets the one success report — a system
+/// notification carrying the way in, which shows even while this app sits in
+/// the background where a self-drawn capsule cannot (see `DeliveryNotifier`).
+/// 「沉淀到 Obsidian」 used to open the note itself instead — claiming the
+/// foreground on every delivery and racing Obsidian's indexing of the
+/// brand-new file — and now behaves like its sibling: quiet, one tap away.
 @MainActor
 final class ActionRunner {
     /// Opens 设置 → 入口, which is the only place the 「发送到自定义」 list can be
@@ -31,6 +38,7 @@ final class ActionRunner {
     private let sceneCoordinator: SceneCoordinator
     private let skills: SkillLibrary
     private let toast = ToastPresenter()
+    private let notifier = DeliveryNotifier()
     private let picker = TargetPickerPanel()
     /// The forward currently in flight, so the next one waits for it.
     ///
@@ -66,6 +74,10 @@ final class ActionRunner {
         pending = Task { await previous?.value; await operation() }
     }
 
+    func configureNotifications() {
+        notifier.configure()
+    }
+
     func handle(_ arrival: ArrivedBatch) {
         switch arrival.action {
         case .collect:
@@ -81,7 +93,7 @@ final class ActionRunner {
             // Nothing is shown: the share sheet said 「已复制到剪贴板」 a moment
             // ago and is still on screen. A second capsule saying it again is
             // WeChatBridge talking over the system.
-        case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness, .obsidian, .custom:
+        case .codex, .claude, .doubao, .qwen, .workBuddy, .weSight, .deepSeekHarness, .obsidian, .folder, .custom:
             // Shares and WeChat captures share the same clipboard queue.
             //
             // Read here rather than where the panel opens. This forward may wait
@@ -104,8 +116,10 @@ final class ActionRunner {
                     self.model.recordExpired(urls: arrival.urls)
                     return
                 }
+                // The knowledge destinations paste nothing, so there is no
+                // prompt to attach and no scene to pick.
                 let context = await self.sceneCoordinator.prepare(
-                    enabled: arrival.action != .obsidian
+                    enabled: arrival.action != .obsidian && arrival.action != .folder
                         && !self.preferences.scenes.enabledScenes.isEmpty,
                     groupName: nil,
                     captureTitle: arrival.capturesGroupName,
@@ -168,6 +182,10 @@ final class ActionRunner {
         )
         if arrival.action == .obsidian {
             await deliverToObsidian(arrival, context: context)
+            return
+        }
+        if arrival.action == .folder {
+            await deliverToFolder(arrival, context: context)
             return
         }
         guard arrival.action == .custom, arrival.target == nil else {
@@ -241,7 +259,11 @@ final class ActionRunner {
     }
 
     /// Obsidian is not a paste destination: it needs the archive turned into a
-    /// note and copied into the user's vault before the record can say delivered.
+    /// note and copied into the user's vault before the record can say
+    /// delivered. The note does not open itself: a delivery never yanks the
+    /// user out of whatever they were doing, and the notification's
+    /// 「打开笔记」 is the way in — see `DeliveryNotifier` for why the open
+    /// could not stay here (Issue #17).
     private func deliverToObsidian(
         _ arrival: ArrivedBatch,
         context: SceneCoordinator.Selection
@@ -265,9 +287,9 @@ final class ActionRunner {
                 chatName: context.groupName,
                 sceneName: context.scene?.name
             )
-            openInObsidian(notes, vaultPath: vaultPath)
             model.recordDelivery(urls: arrival.urls, action: .obsidian)
             sceneCoordinator.advance(context)
+            await notifier.notify(savedToVault: vaultPath, notes: notes)
         } catch {
             fallBack(
                 arrival,
@@ -276,20 +298,37 @@ final class ActionRunner {
         }
     }
 
-    private func openInObsidian(_ notes: [URL], vaultPath: String) {
-        let vault = URL(fileURLWithPath: vaultPath, isDirectory: true).standardizedFileURL
-        let prefix = vault.path.hasSuffix("/") ? vault.path : vault.path + "/"
-        for note in notes {
-            let path = note.standardizedFileURL.path
-            guard path.hasPrefix(prefix) else { continue }
-            var components = URLComponents()
-            components.scheme = "obsidian"
-            components.host = "open"
-            components.queryItems = [
-                URLQueryItem(name: "vault", value: vault.lastPathComponent),
-                URLQueryItem(name: "file", value: String(path.dropFirst(prefix.count))),
-            ]
-            if let url = components.url { NSWorkspace.shared.open(url) }
+    /// 「沉淀到文件夹」 is not a paste destination either: the archive becomes a
+    /// note in the folder the user picked. Unlike every other destination,
+    /// nothing appears on screen when it works, so this is the one delivery
+    /// that reports success — a notification with a way to the file (Issue
+    /// #19). A notification rather than a capsule because the share extension
+    /// puts this app in the background for every delivery, where a self-drawn
+    /// window never appears.
+    private func deliverToFolder(
+        _ arrival: ArrivedBatch,
+        context: SceneCoordinator.Selection
+    ) async {
+        do {
+            let notes = try KnowledgeDelivery.deliver(
+                urls: arrival.urls,
+                folderPath: preferences.folderDeliveryPath,
+                subfolder: preferences.folderDeliverySubfolder,
+                chatName: context.groupName,
+                sceneName: context.scene?.name
+            )
+            model.recordDelivery(urls: arrival.urls, action: .folder)
+            sceneCoordinator.advance(context)
+            let folder = URL(
+                fileURLWithPath: preferences.folderDeliveryPath,
+                isDirectory: true
+            )
+            await notifier.notify(savedTo: folder.lastPathComponent, revealing: notes)
+        } catch {
+            fallBack(
+                arrival,
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
         }
     }
 

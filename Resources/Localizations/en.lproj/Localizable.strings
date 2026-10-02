@@ -7,6 +7,22 @@
 "关于 WeChatBridge…" = "About WeChatBridge…";
 "退出 WeChatBridge" = "Quit WeChatBridge";
 
+/* Main menu (AppKit entry, replacing the default menu the SwiftUI shell synthesized) */
+"隐藏 WeChatBridge" = "Hide WeChatBridge";
+"隐藏其他" = "Hide Others";
+"显示全部" = "Show All";
+"编辑" = "Edit";
+"撤销" = "Undo";
+"重做" = "Redo";
+"剪切" = "Cut";
+"拷贝" = "Copy";
+"粘贴" = "Paste";
+"全选" = "Select All";
+"窗口" = "Window";
+"最小化" = "Minimize";
+"缩放" = "Zoom";
+"关闭" = "Close";
+
 /* Forward target menus */
 "%@ 等 %d 个" = "%@ (%d files)";
 "在 Finder 中显示" = "Show in Finder";
@@ -17,6 +33,7 @@
 "发给 WeSight" = "Send to WeSight";
 "发给 DeepSeek Harness" = "Send to DeepSeek Harness";
 "沉淀到 Obsidian" = "Save to Obsidian";
+"沉淀到文件夹" = "Save to Folder";
 "添加应用…" = "Add an App…";
 
 /* Forward targets */
@@ -31,7 +48,13 @@
 "豆包" = "Doubao";
 "WeSight" = "WeSight";
 "Obsidian" = "Obsidian";
+"文件夹" = "the folder";
 "剪贴板" = "the clipboard";
+
+/* Knowledge deliveries — land quietly, so their success gets said */
+"已保存到 %@" = "Saved to %@";
+"在访达中显示" = "Reveal in Finder";
+"打开笔记" = "Open Note";
 
 /* Share extension — no interface; only a failure still speaks */
 "系统没有返回文件。" = "The system returned no file.";
@@ -109,6 +132,7 @@
 "激活 WeSight 并直接粘贴到输入框。" = "Brings WeSight forward and pastes straight into its input.";
 "激活 DeepSeek Harness 并直接粘贴到输入框。" = "Brings DeepSeek Harness forward and pastes straight into its input.";
 "把聊天记录转成 Markdown，写入选定的 Obsidian 知识库。" = "Turns the chat archive into Markdown and writes it into the selected Obsidian vault.";
+"把聊天记录转成 Markdown 和附件，写入选定的文件夹。" = "Turns the chat into Markdown and attachments in the folder you choose.";
 "只放进剪贴板，去哪儿按 ⌘V 由你决定。" = "Puts them on the clipboard and leaves the ⌘V to you.";
 "转发时从你自己的清单里挑一个 App，激活它并粘贴。" = "Pick an app from your own list when you forward; WeChatBridge brings it forward and pastes.";
 "未注册" = "Not registered";
@@ -125,10 +149,13 @@
 "只粘贴文件路径" = "Paste path only";
 "给终端类应用用：粘贴的是带引号的文件路径，跟把文件拖进终端一样。" = "For terminal-style apps: pastes the quoted file path, exactly as dropping the file on a terminal would.";
 "Obsidian 沉淀" = "Obsidian";
+"文件夹沉淀" = "Folder";
 "知识库文件夹" = "Vault folder";
+"目标文件夹" = "Destination folder";
 "尚未选择" = "Not selected yet";
 "选择文件夹…" = "Choose Folder…";
 "选择知识库" = "Choose Vault";
+"选择目标文件夹" = "Choose Destination Folder";
 "子文件夹" = "Subfolder";
 "聊天 Markdown 与原始 ZIP 会写入这个目录。" = "Chat Markdown and the original ZIP are written under this folder.";
 
