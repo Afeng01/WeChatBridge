@@ -6,7 +6,7 @@
 # same pkd election System Settings → General → Login Items & Extensions →
 # Sharing does.
 #
-# All nine run the same executable and tell themselves apart by DKShareAction,
+# All eleven run the same executable and tell themselves apart by DKShareAction,
 # so adding an entry costs a row here and a pair of InfoPlist.strings — not a
 # second copy of the import code.
 #
@@ -26,12 +26,13 @@ SHARE_SLOTS=(
 	"WeSight|WeChatBridgeShareWeSight|ShareWeSight|weSight|发给 WeSight"
 	"DeepSeekHarness|WeChatBridgeShareDeepSeekHarness|ShareDeepSeekHarness|deepSeekHarness|发给 DeepSeek Harness"
 	"Obsidian|WeChatBridgeShareObsidian|ShareObsidian|obsidian|沉淀到 Obsidian"
+	"Folder|WeChatBridgeShareFolder|ShareFolder|folder|沉淀到文件夹"
 	"Clipboard|WeChatBridgeShareClipboard|ShareClipboard|clipboard|复制到剪贴板"
 	"Custom|WeChatBridgeShareCustom|ShareCustom|custom|发送到自定义"
 )
 
-# Artwork copied into each extension that targets another app. Clipboard and
-# Custom have no destination app logo to borrow.
+# Artwork copied into each extension that targets another app. Clipboard,
+# Custom and Folder have no destination app logo to borrow.
 share_logo_name() {
 	case "$1" in
 		Codex) printf '%s' "04-chatgpt.png" ;;

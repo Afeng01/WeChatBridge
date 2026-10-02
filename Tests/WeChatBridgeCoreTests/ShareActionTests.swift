@@ -16,7 +16,7 @@ final class ShareActionTests: XCTestCase {
     }
 
     func testOnlyForwardingActionsNameATargetApp() {
-        XCTAssertEqual(ShareAction.allCases.count, 10)
+        XCTAssertEqual(ShareAction.allCases.count, 11)
         XCTAssertEqual(ShareAction.codex.targetBundleIdentifier, "com.openai.codex")
         XCTAssertEqual(ShareAction.claude.targetBundleIdentifier, "com.anthropic.claudefordesktop")
         XCTAssertEqual(ShareAction.doubao.targetBundleIdentifier, "com.bot.pc.doubao")
@@ -26,9 +26,29 @@ final class ShareActionTests: XCTestCase {
         XCTAssertEqual(ShareAction.deepSeekHarness.targetBundleIdentifier, "com.deepseek.dsh")
         XCTAssertEqual(ShareAction.obsidian.targetBundleIdentifier, "md.obsidian")
         XCTAssertNil(ShareAction.clipboard.targetBundleIdentifier)
+        // 「沉淀到文件夹」 delivers to a path, not an app.
+        XCTAssertNil(ShareAction.folder.targetBundleIdentifier)
         // 「发送到自定义」 names no app of its own: the one it goes to is chosen
         // in the share panel and travels in the intent.
         XCTAssertNil(ShareAction.custom.targetBundleIdentifier)
+    }
+
+    /// The folder entry travels in manifests and intents like every other
+    /// action: a build that cannot decode `folder` would drop the request, so
+    /// the round trip is pinned here.
+    func testFolderActionRoundTripsThroughCodable() throws {
+        let data = try JSONEncoder().encode(ShareAction.folder)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "\"folder\"")
+        XCTAssertEqual(try JSONDecoder().decode(ShareAction.self, from: data), .folder)
+
+        let manifest = BatchManifest(
+            batchID: UUID(),
+            createdAt: Date(),
+            items: [],
+            action: .folder
+        )
+        let manifestData = try BatchManifest.encoder().encode(manifest)
+        XCTAssertEqual(try BatchManifest.decoder().decode(BatchManifest.self, from: manifestData).action, .folder)
     }
 
     func testAnIntentIsReadableExactlyOnce() throws {
@@ -64,7 +84,7 @@ final class ShareActionTests: XCTestCase {
         XCTAssertFalse(ShareAction.clipboard.needsIntent)
         for action in [
             ShareAction.codex, .claude, .doubao, .qwen, .workBuddy,
-            .weSight, .deepSeekHarness, .obsidian, .custom,
+            .weSight, .deepSeekHarness, .obsidian, .folder, .custom,
         ] {
             XCTAssertTrue(action.needsIntent, "\(action)")
         }
