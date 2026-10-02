@@ -74,7 +74,10 @@ final class CollectionAppTests: XCTestCase {
         let notes = destination.appendingPathComponent("微信流")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: notes.path).filter { $0.hasSuffix(".md") }, ["产品讨论群的聊天.md"])
         let text = try String(contentsOf: notes.appendingPathComponent("产品讨论群的聊天.md"), encoding: .utf8)
-        XCTAssertTrue(text.contains("messages: 100"), "Overlapping batches must remain deduplicated")
+        // Both fixtures share 85 text messages. Their final video messages
+        // have different timestamps, so the merged note has 101 unique records.
+        XCTAssertTrue(text.contains("messages: 101"))
+        XCTAssertEqual(text.components(separatedBy: "讨论消息 1：").count - 1, 1)
     }
 
     @MainActor
