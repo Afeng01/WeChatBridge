@@ -5,7 +5,7 @@ import UserNotifications
 
 final class DeliveryNotifierTests: XCTestCase {
     @MainActor
-    func testStartupRegistersActionsBeforeAnyNewDelivery() {
+    func testStartupRegistersActionsBeforeAnyNewDelivery() async {
         let center = TestNotificationCenter()
         let notifier = DeliveryNotifier(center: center)
         notifier.configure()
@@ -15,7 +15,7 @@ final class DeliveryNotifierTests: XCTestCase {
     }
 
     @MainActor
-    func testRestartReplacesDelegateWithoutSendingANewNotification() {
+    func testRestartReplacesDelegateWithoutSendingANewNotification() async {
         let center = TestNotificationCenter()
         var previous: DeliveryNotifier? = DeliveryNotifier(center: center)
         previous?.configure()
@@ -57,7 +57,6 @@ final class DeliveryNotifierTests: XCTestCase {
         XCTAssertNotEqual(DeliveryNotifier.categoryIdentifier, DeliveryNotifier.revealActionIdentifier)
     }
 }
-
 
 private final class TestNotificationCenter: DeliveryNotificationCenter {
     weak var delegate: UNUserNotificationCenterDelegate?
