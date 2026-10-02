@@ -7,6 +7,22 @@
 "关于 WeChatBridge…" = "About WeChatBridge…";
 "退出 WeChatBridge" = "Quit WeChatBridge";
 
+/* Main menu (AppKit entry, replacing the default menu the SwiftUI shell synthesized) */
+"隐藏 WeChatBridge" = "Hide WeChatBridge";
+"隐藏其他" = "Hide Others";
+"显示全部" = "Show All";
+"编辑" = "Edit";
+"撤销" = "Undo";
+"重做" = "Redo";
+"剪切" = "Cut";
+"拷贝" = "Copy";
+"粘贴" = "Paste";
+"全选" = "Select All";
+"窗口" = "Window";
+"最小化" = "Minimize";
+"缩放" = "Zoom";
+"关闭" = "Close";
+
 /* Forward target menus */
 "%@ 等 %d 个" = "%@ (%d files)";
 "在 Finder 中显示" = "Show in Finder";
